@@ -461,6 +461,8 @@ func (m *MongodbDatabase) BuildMongodumpURI(password string) string {
 	extraParams := ""
 	if m.IsHttps {
 		extraParams += "&tls=true&tlsInsecure=true"
+	} else {
+		extraParams += "&tls=false"
 	}
 	if m.IsDirectConnection {
 		extraParams += "&directConnection=true"
@@ -503,6 +505,8 @@ func (m *MongodbDatabase) buildConnectionURI(password string) string {
 	extraParams := ""
 	if m.IsHttps {
 		extraParams += "&tls=true&tlsInsecure=true"
+	} else {
+		extraParams += "&tls=false"
 	}
 	if m.IsDirectConnection {
 		extraParams += "&directConnection=true"

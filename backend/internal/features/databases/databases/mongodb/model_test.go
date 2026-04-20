@@ -732,3 +732,83 @@ func Test_Validate_StandardConnection_RequiresPort(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "port is required for standard connections")
 }
+
+func Test_BuildConnectionURI_WhenIsHttpsFalse_ContainsTlsFalse(t *testing.T) {
+	port := 27017
+	model := &MongodbDatabase{
+		Host:         "localhost",
+		Port:         &port,
+		Username:     "testuser",
+		Password:     "testpass123",
+		Database:     "mydb",
+		AuthDatabase: "admin",
+		IsHttps:      false,
+		IsSrv:        false,
+	}
+
+	uri := model.buildConnectionURI("testpass123")
+
+	assert.Contains(t, uri, "tls=false")
+	assert.NotContains(t, uri, "tls=true")
+	assert.NotContains(t, uri, "tlsInsecure")
+}
+
+func Test_BuildConnectionURI_WhenSrvAndIsHttpsFalse_ContainsTlsFalse(t *testing.T) {
+	model := &MongodbDatabase{
+		Host:         "cluster0.example.mongodb.net",
+		Port:         nil,
+		Username:     "testuser",
+		Password:     "testpass123",
+		Database:     "mydb",
+		AuthDatabase: "admin",
+		IsHttps:      false,
+		IsSrv:        true,
+	}
+
+	uri := model.buildConnectionURI("testpass123")
+
+	assert.Contains(t, uri, "mongodb+srv://")
+	assert.Contains(t, uri, "tls=false")
+	assert.NotContains(t, uri, "tls=true")
+	assert.NotContains(t, uri, "tlsInsecure")
+}
+
+func Test_BuildMongodumpURI_WhenIsHttpsFalse_ContainsTlsFalse(t *testing.T) {
+	port := 27017
+	model := &MongodbDatabase{
+		Host:         "localhost",
+		Port:         &port,
+		Username:     "testuser",
+		Password:     "testpass123",
+		Database:     "mydb",
+		AuthDatabase: "admin",
+		IsHttps:      false,
+		IsSrv:        false,
+	}
+
+	uri := model.BuildMongodumpURI("testpass123")
+
+	assert.Contains(t, uri, "tls=false")
+	assert.NotContains(t, uri, "tls=true")
+	assert.NotContains(t, uri, "tlsInsecure")
+}
+
+func Test_BuildMongodumpURI_WhenSrvAndIsHttpsFalse_ContainsTlsFalse(t *testing.T) {
+	model := &MongodbDatabase{
+		Host:         "cluster0.example.mongodb.net",
+		Port:         nil,
+		Username:     "testuser",
+		Password:     "testpass123",
+		Database:     "mydb",
+		AuthDatabase: "admin",
+		IsHttps:      false,
+		IsSrv:        true,
+	}
+
+	uri := model.BuildMongodumpURI("testpass123")
+
+	assert.Contains(t, uri, "mongodb+srv://")
+	assert.Contains(t, uri, "tls=false")
+	assert.NotContains(t, uri, "tls=true")
+	assert.NotContains(t, uri, "tlsInsecure")
+}
