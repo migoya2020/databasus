@@ -1586,6 +1586,31 @@ func Test_CreateReadOnlyUser_WithIncludeSchemas_OnlyGrantsAccessToSpecifiedSchem
 	)
 }
 
+func Test_GetRawDbSizeMb_Postgresql_ReturnsPositiveSize(t *testing.T) {
+	env := config.GetEnv()
+	container := connectToPostgresContainer(t, env.TestPostgres16Port)
+	defer container.DB.Close()
+
+	tableName := fmt.Sprintf("size_test_%s", uuid.New().String()[:8])
+	_, err := container.DB.Exec(fmt.Sprintf(`
+		CREATE TABLE %s (id SERIAL PRIMARY KEY, payload TEXT NOT NULL);
+		INSERT INTO %s (payload) SELECT repeat('x', 1024) FROM generate_series(1, 10000);
+	`, tableName, tableName))
+	assert.NoError(t, err)
+	defer func() {
+		_, _ = container.DB.Exec(fmt.Sprintf("DROP TABLE IF EXISTS %s", tableName))
+	}()
+
+	pgModel := createPostgresModel(container)
+	assert.NotNil(t, pgModel)
+
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+
+	sizeMB, err := pgModel.GetRawDbSizeMb(t.Context(), logger, nil, uuid.New())
+	assert.NoError(t, err)
+	assert.Greater(t, sizeMB, 0.0, "raw db size should be > 0 after inserting data")
+}
+
 func connectToPostgresContainer(t *testing.T, port string) *PostgresContainer {
 	dbName := "testdb"
 	password := "testpassword"

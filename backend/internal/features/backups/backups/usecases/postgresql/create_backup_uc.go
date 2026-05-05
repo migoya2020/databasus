@@ -86,6 +86,15 @@ func (uc *CreatePostgresqlBackupUsecase) Execute(
 		return nil, fmt.Errorf("failed to decrypt database password: %w", err)
 	}
 
+	rawSizeMB, err := pg.GetRawDbSizeMb(ctx, uc.logger, uc.fieldEncryptor, db.ID)
+	if err != nil {
+		uc.logger.Warn("failed to fetch raw db size before backup",
+			"database_id", db.ID,
+			"error", err)
+	} else {
+		backup.BackupRawDbSizeMb = rawSizeMB
+	}
+
 	return uc.streamToStorage(
 		ctx,
 		backup,

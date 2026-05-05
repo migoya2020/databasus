@@ -161,6 +161,47 @@ func (p *PostgresqlDatabase) TestConnection(
 	return testSingleDatabaseConnection(logger, ctx, p, encryptor, databaseID)
 }
 
+// GetRawDbSizeMb returns whole-database size via pg_database_size; when
+// IncludeSchemas filters the dump, the value remains the full DB size.
+func (p *PostgresqlDatabase) GetRawDbSizeMb(
+	ctx context.Context,
+	logger *slog.Logger,
+	encryptor encryption.FieldEncryptor,
+	databaseID uuid.UUID,
+) (float64, error) {
+	if p.BackupType == PostgresBackupTypeWalV1 {
+		return 0, nil
+	}
+
+	if p.Database == nil || *p.Database == "" {
+		return 0, nil
+	}
+
+	password, err := decryptPasswordIfNeeded(p.Password, encryptor, databaseID)
+	if err != nil {
+		return 0, fmt.Errorf("failed to decrypt password: %w", err)
+	}
+
+	connStr := buildConnectionStringForDB(p, *p.Database, password)
+
+	conn, err := pgx.Connect(ctx, connStr)
+	if err != nil {
+		return 0, fmt.Errorf("failed to connect to database '%s': %w", *p.Database, err)
+	}
+	defer func() {
+		if closeErr := conn.Close(ctx); closeErr != nil {
+			logger.Error("Failed to close connection", "error", closeErr)
+		}
+	}()
+
+	var sizeBytes int64
+	if err := conn.QueryRow(ctx, "SELECT pg_database_size(current_database())").Scan(&sizeBytes); err != nil {
+		return 0, fmt.Errorf("failed to query pg_database_size: %w", err)
+	}
+
+	return float64(sizeBytes) / (1024 * 1024), nil
+}
+
 func (p *PostgresqlDatabase) HideSensitiveData() {
 	if p == nil {
 		return

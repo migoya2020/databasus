@@ -117,6 +117,49 @@ func (m *MongodbDatabase) TestConnection(
 	return nil
 }
 
+// GetRawDbSizeMb reads dataSize from the dbStats command — the uncompressed
+// total of user data, the closest analog to the relational "raw DB size".
+func (m *MongodbDatabase) GetRawDbSizeMb(
+	ctx context.Context,
+	logger *slog.Logger,
+	encryptor encryption.FieldEncryptor,
+	databaseID uuid.UUID,
+) (float64, error) {
+	if m.Database == "" {
+		return 0, nil
+	}
+
+	password, err := decryptPasswordIfNeeded(m.Password, encryptor, databaseID)
+	if err != nil {
+		return 0, fmt.Errorf("failed to decrypt password: %w", err)
+	}
+
+	uri := m.buildConnectionURI(password)
+
+	clientOptions := options.Client().ApplyURI(uri)
+	client, err := mongo.Connect(ctx, clientOptions)
+	if err != nil {
+		return 0, fmt.Errorf("failed to connect to MongoDB: %w", err)
+	}
+	defer func() {
+		if disconnectErr := client.Disconnect(ctx); disconnectErr != nil {
+			logger.Error("Failed to disconnect from MongoDB", "error", disconnectErr)
+		}
+	}()
+
+	result := client.Database(m.Database).RunCommand(ctx, bson.D{{Key: "dbStats", Value: 1}})
+
+	var stats struct {
+		DataSize float64 `bson:"dataSize"`
+	}
+
+	if err := result.Decode(&stats); err != nil {
+		return 0, fmt.Errorf("failed to decode dbStats for MongoDB database '%s': %w", m.Database, err)
+	}
+
+	return stats.DataSize / (1024 * 1024), nil
+}
+
 func (m *MongodbDatabase) HideSensitiveData() {
 	if m == nil {
 		return

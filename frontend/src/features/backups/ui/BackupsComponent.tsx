@@ -454,7 +454,7 @@ export const BackupsComponent = ({
           Size
           <Tooltip
             className="ml-1"
-            title="The file size we actually store in the storage (local, S3, Google Drive, etc.), usually compressed in ~5x times"
+            title="Top: the compressed backup file size we actually store in the storage (local, S3, Google Drive, etc.). Bottom (grayed): the original uncompressed database size at backup time. Backups are usually compressed ~5x."
           >
             <InfoCircleOutlined />
           </Tooltip>
@@ -464,17 +464,24 @@ export const BackupsComponent = ({
       key: 'backupSizeMb',
       width: 150,
       render: (sizeMb: number, record: Backup) => (
-        <div className="flex items-center gap-2">
-          {formatSize(sizeMb)}
-          {record.pgWalBackupType === PgWalBackupType.PG_FULL_BACKUP && (
-            <span className="rounded bg-blue-100 px-1.5 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-900 dark:text-blue-300">
-              FULL
-            </span>
-          )}
-          {record.pgWalBackupType === PgWalBackupType.PG_WAL_SEGMENT && (
-            <span className="rounded bg-purple-100 px-1.5 py-0.5 text-xs font-medium text-purple-700 dark:bg-purple-900 dark:text-purple-300">
-              WAL
-            </span>
+        <div>
+          <div className="flex items-center gap-2">
+            {formatSize(sizeMb)}
+            {record.pgWalBackupType === PgWalBackupType.PG_FULL_BACKUP && (
+              <span className="rounded bg-blue-100 px-1.5 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-900 dark:text-blue-300">
+                FULL
+              </span>
+            )}
+            {record.pgWalBackupType === PgWalBackupType.PG_WAL_SEGMENT && (
+              <span className="rounded bg-purple-100 px-1.5 py-0.5 text-xs font-medium text-purple-700 dark:bg-purple-900 dark:text-purple-300">
+                WAL
+              </span>
+            )}
+          </div>
+          {record.backupRawDbSizeMb > 0 && (
+            <div className="text-xs text-gray-500 dark:text-gray-500">
+              {formatSize(record.backupRawDbSizeMb)} (DB size)
+            </div>
           )}
         </div>
       ),
@@ -616,6 +623,11 @@ export const BackupsComponent = ({
                             </span>
                           )}
                         </div>
+                        {backup.backupRawDbSizeMb > 0 && (
+                          <div className="text-xs text-gray-500 dark:text-gray-500">
+                            {formatSize(backup.backupRawDbSizeMb)} (DB size)
+                          </div>
+                        )}
                       </div>
                       <div>
                         <div className="text-xs text-gray-500 dark:text-gray-400">Duration</div>

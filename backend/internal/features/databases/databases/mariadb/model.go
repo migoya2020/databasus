@@ -111,6 +111,51 @@ func (m *MariadbDatabase) TestConnection(
 	return nil
 }
 
+func (m *MariadbDatabase) GetRawDbSizeMb(
+	ctx context.Context,
+	logger *slog.Logger,
+	encryptor encryption.FieldEncryptor,
+	databaseID uuid.UUID,
+) (float64, error) {
+	if m.Database == nil || *m.Database == "" {
+		return 0, nil
+	}
+
+	password, err := decryptPasswordIfNeeded(m.Password, encryptor, databaseID)
+	if err != nil {
+		return 0, fmt.Errorf("failed to decrypt password: %w", err)
+	}
+
+	dsn := m.buildDSN(password, *m.Database)
+
+	db, err := sql.Open("mysql", dsn)
+	if err != nil {
+		return 0, fmt.Errorf("failed to connect to MariaDB database '%s': %w", *m.Database, err)
+	}
+	defer func() {
+		if closeErr := db.Close(); closeErr != nil {
+			logger.Error("Failed to close MariaDB connection", "error", closeErr)
+		}
+	}()
+
+	db.SetConnMaxLifetime(15 * time.Second)
+	db.SetMaxOpenConns(1)
+	db.SetMaxIdleConns(1)
+
+	const query = `
+		SELECT COALESCE(SUM(data_length + index_length), 0) / (1024 * 1024)
+		FROM information_schema.tables
+		WHERE table_schema = ?
+	`
+
+	var sizeMB float64
+	if err := db.QueryRowContext(ctx, query, *m.Database).Scan(&sizeMB); err != nil {
+		return 0, fmt.Errorf("failed to query MariaDB database size: %w", err)
+	}
+
+	return sizeMB, nil
+}
+
 func (m *MariadbDatabase) HideSensitiveData() {
 	if m == nil {
 		return

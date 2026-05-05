@@ -812,6 +812,41 @@ type MariadbContainer struct {
 	DB       *sqlx.DB
 }
 
+func Test_GetRawDbSizeMb_Mariadb_ReturnsPositiveSize(t *testing.T) {
+	env := config.GetEnv()
+	container := connectToMariadbContainer(t, env.TestMariadb1011Port, tools.MariadbVersion1011)
+	defer container.DB.Close()
+
+	tableName := fmt.Sprintf("size_test_%s", uuid.New().String()[:8])
+	_, err := container.DB.Exec(fmt.Sprintf(
+		`CREATE TABLE %s (id INT AUTO_INCREMENT PRIMARY KEY, payload TEXT NOT NULL)`,
+		tableName,
+	))
+	assert.NoError(t, err)
+	defer func() {
+		_, _ = container.DB.Exec(fmt.Sprintf("DROP TABLE IF EXISTS %s", tableName))
+	}()
+
+	for i := 0; i < 1000; i++ {
+		_, err = container.DB.Exec(
+			fmt.Sprintf("INSERT INTO %s (payload) VALUES (?)", tableName),
+			strings.Repeat("x", 1024),
+		)
+		assert.NoError(t, err)
+	}
+
+	_, err = container.DB.Exec("ANALYZE TABLE " + tableName)
+	assert.NoError(t, err)
+
+	mariadbModel := createMariadbModel(container)
+
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+
+	sizeMB, err := mariadbModel.GetRawDbSizeMb(t.Context(), logger, nil, uuid.New())
+	assert.NoError(t, err)
+	assert.Greater(t, sizeMB, 0.0, "raw db size should be > 0 after inserting data")
+}
+
 func connectToMariadbContainer(
 	t *testing.T,
 	port string,

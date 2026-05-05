@@ -2,6 +2,7 @@ package telemetry
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"os"
@@ -14,6 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	backups_core "databasus-backend/internal/features/backups/backups/core"
 	"databasus-backend/internal/features/databases"
 	"databasus-backend/internal/features/databases/databases/mariadb"
 	"databasus-backend/internal/features/databases/databases/mongodb"
@@ -63,7 +65,9 @@ func (f *fakeNotifierLister) GetAllNotifiers() ([]*notifiers.Notifier, error) {
 
 type fakeBackupChecker struct {
 	hasBackupSince map[uuid.UUID]bool
+	latestBackups  map[uuid.UUID]*backups_core.Backup
 	err            error
+	latestErr      error
 }
 
 func (f *fakeBackupChecker) HasSuccessfulBackupSince(
@@ -75,6 +79,16 @@ func (f *fakeBackupChecker) HasSuccessfulBackupSince(
 	}
 
 	return f.hasBackupSince[databaseID], nil
+}
+
+func (f *fakeBackupChecker) GetLatestCompletedBackup(
+	databaseID uuid.UUID,
+) (*backups_core.Backup, error) {
+	if f.latestErr != nil {
+		return nil, f.latestErr
+	}
+
+	return f.latestBackups[databaseID], nil
 }
 
 func newServiceUnderTest(
@@ -190,12 +204,13 @@ func Test_BuildAndSend_ProducesExpectedRequest(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func Test_BuildAndSend_DedupesStoragesAndNotifiers(t *testing.T) {
+func Test_BuildAndSend_PreservesStorageAndNotifierDuplicates(t *testing.T) {
 	sender := &fakeSender{}
 	service := newServiceUnderTest(
 		t,
 		&fakeDatabaseLister{},
 		&fakeStorageLister{storages: []*storages.Storage{
+			{Type: storages.StorageTypeS3},
 			{Type: storages.StorageTypeS3},
 			{Type: storages.StorageTypeS3},
 			{Type: storages.StorageTypeLocal},
@@ -212,8 +227,8 @@ func Test_BuildAndSend_DedupesStoragesAndNotifiers(t *testing.T) {
 	require.NoError(t, service.BuildAndSend(context.Background()))
 	require.Len(t, sender.calls, 1)
 
-	assert.Equal(t, []string{"LOCAL", "S3"}, sender.calls[0].Storages)
-	assert.Equal(t, []string{"EMAIL", "TELEGRAM"}, sender.calls[0].Notifiers)
+	assert.Equal(t, []string{"LOCAL", "S3", "S3", "S3"}, sender.calls[0].Storages)
+	assert.Equal(t, []string{"EMAIL", "EMAIL", "TELEGRAM"}, sender.calls[0].Notifiers)
 }
 
 func Test_BuildAndSend_WhenInstanceFileFails_DoesNotCallSender(t *testing.T) {
@@ -351,6 +366,136 @@ func Test_BuildAndSend_WhenBackupCheckerFails_ReturnsError(t *testing.T) {
 	err := service.BuildAndSend(context.Background())
 	require.Error(t, err)
 	assert.ErrorIs(t, err, checkerErr)
+	assert.Empty(t, sender.calls)
+}
+
+func Test_BuildAndSend_WhenLatestBackupHasBothSizes_IncludesBoth(t *testing.T) {
+	db := postgresDatabase("pg", availableStatus())
+
+	sender := &fakeSender{}
+	service := newServiceUnderTest(
+		t,
+		&fakeDatabaseLister{databases: []*databases.Database{db}},
+		&fakeStorageLister{},
+		&fakeNotifierLister{},
+		&fakeBackupChecker{
+			latestBackups: map[uuid.UUID]*backups_core.Backup{
+				db.ID: {BackupSizeMb: 870.4, BackupRawDbSizeMb: 4321.7},
+			},
+		},
+		sender,
+	)
+
+	require.NoError(t, service.BuildAndSend(context.Background()))
+	require.Len(t, sender.calls, 1)
+	require.Len(t, sender.calls[0].Databases, 1)
+
+	entry := sender.calls[0].Databases[0]
+	assert.Equal(t, int64(870), entry.BackupSizeMb)
+	assert.Equal(t, int64(4322), entry.RawSizeMb)
+}
+
+func Test_BuildAndSend_WhenRawSizeZero_IncludesOnlyBackupSize(t *testing.T) {
+	db := postgresDatabase("pg", availableStatus())
+
+	sender := &fakeSender{}
+	service := newServiceUnderTest(
+		t,
+		&fakeDatabaseLister{databases: []*databases.Database{db}},
+		&fakeStorageLister{},
+		&fakeNotifierLister{},
+		&fakeBackupChecker{
+			latestBackups: map[uuid.UUID]*backups_core.Backup{
+				db.ID: {BackupSizeMb: 100, BackupRawDbSizeMb: 0},
+			},
+		},
+		sender,
+	)
+
+	require.NoError(t, service.BuildAndSend(context.Background()))
+	require.Len(t, sender.calls, 1)
+	require.Len(t, sender.calls[0].Databases, 1)
+
+	entry := sender.calls[0].Databases[0]
+	assert.Equal(t, int64(100), entry.BackupSizeMb)
+	assert.Equal(t, int64(0), entry.RawSizeMb)
+
+	encoded, err := json.Marshal(entry)
+	require.NoError(t, err)
+	assert.NotContains(t, string(encoded), "rawSizeMb")
+	assert.Contains(t, string(encoded), "backupSizeMb")
+}
+
+func Test_BuildAndSend_WhenBackupSizeZero_IncludesOnlyRawSize(t *testing.T) {
+	db := postgresDatabase("pg", availableStatus())
+
+	sender := &fakeSender{}
+	service := newServiceUnderTest(
+		t,
+		&fakeDatabaseLister{databases: []*databases.Database{db}},
+		&fakeStorageLister{},
+		&fakeNotifierLister{},
+		&fakeBackupChecker{
+			latestBackups: map[uuid.UUID]*backups_core.Backup{
+				db.ID: {BackupSizeMb: 0, BackupRawDbSizeMb: 999},
+			},
+		},
+		sender,
+	)
+
+	require.NoError(t, service.BuildAndSend(context.Background()))
+	require.Len(t, sender.calls, 1)
+	require.Len(t, sender.calls[0].Databases, 1)
+
+	entry := sender.calls[0].Databases[0]
+	assert.Equal(t, int64(0), entry.BackupSizeMb)
+	assert.Equal(t, int64(999), entry.RawSizeMb)
+}
+
+func Test_BuildAndSend_WhenNoCompletedBackup_OmitsBothSizes(t *testing.T) {
+	db := postgresDatabase("pg", availableStatus())
+
+	sender := &fakeSender{}
+	service := newServiceUnderTest(
+		t,
+		&fakeDatabaseLister{databases: []*databases.Database{db}},
+		&fakeStorageLister{},
+		&fakeNotifierLister{},
+		&fakeBackupChecker{},
+		sender,
+	)
+
+	require.NoError(t, service.BuildAndSend(context.Background()))
+	require.Len(t, sender.calls, 1)
+	require.Len(t, sender.calls[0].Databases, 1)
+
+	entry := sender.calls[0].Databases[0]
+	assert.Equal(t, int64(0), entry.BackupSizeMb)
+	assert.Equal(t, int64(0), entry.RawSizeMb)
+
+	encoded, err := json.Marshal(entry)
+	require.NoError(t, err)
+	assert.NotContains(t, string(encoded), "rawSizeMb")
+	assert.NotContains(t, string(encoded), "backupSizeMb")
+}
+
+func Test_BuildAndSend_WhenLatestBackupLookupFails_ReturnsError(t *testing.T) {
+	db := postgresDatabase("pg", availableStatus())
+	lookupErr := errors.New("query exploded")
+
+	sender := &fakeSender{}
+	service := newServiceUnderTest(
+		t,
+		&fakeDatabaseLister{databases: []*databases.Database{db}},
+		&fakeStorageLister{},
+		&fakeNotifierLister{},
+		&fakeBackupChecker{latestErr: lookupErr},
+		sender,
+	)
+
+	err := service.BuildAndSend(context.Background())
+	require.Error(t, err)
+	assert.ErrorIs(t, err, lookupErr)
 	assert.Empty(t, sender.calls)
 }
 

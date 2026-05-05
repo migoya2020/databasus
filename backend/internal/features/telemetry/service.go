@@ -3,12 +3,14 @@ package telemetry
 import (
 	"context"
 	"log/slog"
+	"math"
 	"runtime"
 	"sort"
 	"time"
 
 	"github.com/google/uuid"
 
+	backups_core "databasus-backend/internal/features/backups/backups/core"
 	"databasus-backend/internal/features/databases"
 	"databasus-backend/internal/features/notifiers"
 	"databasus-backend/internal/features/storages"
@@ -37,6 +39,7 @@ type notifierLister interface {
 
 type backupChecker interface {
 	HasSuccessfulBackupSince(databaseID uuid.UUID, since time.Time) (bool, error)
+	GetLatestCompletedBackup(databaseID uuid.UUID) (*backups_core.Backup, error)
 }
 
 type TelemetryService struct {
@@ -131,10 +134,38 @@ func (s *TelemetryService) collectActiveDatabases() ([]DatabaseEntry, error) {
 			continue
 		}
 
+		if err := s.attachBackupSizes(&entry, db.ID); err != nil {
+			return nil, err
+		}
+
 		entries = append(entries, entry)
 	}
 
 	return entries, nil
+}
+
+func (s *TelemetryService) attachBackupSizes(
+	entry *DatabaseEntry,
+	databaseID uuid.UUID,
+) error {
+	backup, err := s.backupService.GetLatestCompletedBackup(databaseID)
+	if err != nil {
+		return err
+	}
+
+	if backup == nil {
+		return nil
+	}
+
+	if backup.BackupSizeMb > 0 {
+		entry.BackupSizeMb = int64(math.Round(backup.BackupSizeMb))
+	}
+
+	if backup.BackupRawDbSizeMb > 0 {
+		entry.RawSizeMb = int64(math.Round(backup.BackupRawDbSizeMb))
+	}
+
+	return nil
 }
 
 // isDatabaseActive returns true when a database should be counted in telemetry.
@@ -187,20 +218,13 @@ func (s *TelemetryService) collectStorageTypes() ([]string, error) {
 		return nil, err
 	}
 
-	seen := make(map[string]struct{}, len(allStorages))
 	types := make([]string, 0, len(allStorages))
-
 	for _, st := range allStorages {
 		key := string(st.Type)
 		if key == "" {
 			continue
 		}
 
-		if _, exists := seen[key]; exists {
-			continue
-		}
-
-		seen[key] = struct{}{}
 		types = append(types, key)
 	}
 
@@ -214,20 +238,13 @@ func (s *TelemetryService) collectNotifierTypes() ([]string, error) {
 		return nil, err
 	}
 
-	seen := make(map[string]struct{}, len(allNotifiers))
 	types := make([]string, 0, len(allNotifiers))
-
 	for _, n := range allNotifiers {
 		key := string(n.NotifierType)
 		if key == "" {
 			continue
 		}
 
-		if _, exists := seen[key]; exists {
-			continue
-		}
-
-		seen[key] = struct{}{}
 		types = append(types, key)
 	}
 

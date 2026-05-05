@@ -63,6 +63,12 @@ func (s *BackupService) HasSuccessfulBackupSince(
 	return s.backupRepository.ExistsCompletedSince(databaseID, since)
 }
 
+func (s *BackupService) GetLatestCompletedBackup(
+	databaseID uuid.UUID,
+) (*backups_core.Backup, error) {
+	return s.backupRepository.FindLatestCompleted(databaseID)
+}
+
 func (s *BackupService) OnBeforeBackupsStorageChange(databaseID uuid.UUID) error {
 	err := s.deleteDbBackups(databaseID)
 	if err != nil {

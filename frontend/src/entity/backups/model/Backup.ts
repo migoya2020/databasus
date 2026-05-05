@@ -11,6 +11,7 @@ export interface Backup {
   status: BackupStatus;
   failMessage?: string;
   backupSizeMb: number;
+  backupRawDbSizeMb: number;
   backupDurationMs: number;
   encryption: BackupEncryption;
   pgWalBackupType?: PgWalBackupType;

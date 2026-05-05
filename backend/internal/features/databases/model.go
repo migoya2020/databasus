@@ -100,6 +100,14 @@ func (d *Database) TestConnection(
 	return d.getSpecificDatabase().TestConnection(logger, encryptor, d.ID)
 }
 
+func (d *Database) GetRawDbSizeMb(
+	ctx context.Context,
+	logger *slog.Logger,
+	encryptor encryption.FieldEncryptor,
+) (float64, error) {
+	return d.getSpecificDatabase().GetRawDbSizeMb(ctx, logger, encryptor, d.ID)
+}
+
 func (d *Database) IsUserReadOnly(
 	ctx context.Context,
 	logger *slog.Logger,

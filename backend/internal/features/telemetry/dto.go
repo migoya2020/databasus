@@ -1,8 +1,10 @@
 package telemetry
 
 type DatabaseEntry struct {
-	Type    string `json:"type"`
-	Version string `json:"version"`
+	Type         string `json:"type"`
+	Version      string `json:"version"`
+	RawSizeMb    int64  `json:"rawSizeMb,omitzero"`
+	BackupSizeMb int64  `json:"backupSizeMb,omitzero"`
 }
 
 type CollectRequest struct {

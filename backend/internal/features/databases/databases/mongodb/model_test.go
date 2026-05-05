@@ -388,6 +388,34 @@ type MongodbContainer struct {
 	Client       *mongo.Client
 }
 
+func Test_GetRawDbSizeMb_Mongodb_ReturnsPositiveSize(t *testing.T) {
+	env := config.GetEnv()
+	container := connectToMongodbContainer(t, env.TestMongodb70Port, tools.MongodbVersion7)
+	defer container.Client.Disconnect(t.Context())
+
+	collectionName := fmt.Sprintf("size_test_%s", uuid.New().String()[:8])
+	collection := container.Client.Database(container.Database).Collection(collectionName)
+
+	defer func() {
+		_ = collection.Drop(t.Context())
+	}()
+
+	docs := make([]any, 0, 1000)
+	for i := 0; i < 1000; i++ {
+		docs = append(docs, bson.M{"payload": strings.Repeat("x", 1024)})
+	}
+	_, err := collection.InsertMany(t.Context(), docs)
+	assert.NoError(t, err)
+
+	mongodbModel := createMongodbModel(container)
+
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+
+	sizeMB, err := mongodbModel.GetRawDbSizeMb(t.Context(), logger, nil, uuid.New())
+	assert.NoError(t, err)
+	assert.Greater(t, sizeMB, 0.0, "raw db size should be > 0 after inserting documents")
+}
+
 func connectToMongodbContainer(
 	t *testing.T,
 	port string,

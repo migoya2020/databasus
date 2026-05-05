@@ -316,6 +316,28 @@ func (r *BackupRepository) FindCompletedWalSegmentsAfter(
 	return backups, nil
 }
 
+func (r *BackupRepository) FindLatestCompleted(
+	databaseID uuid.UUID,
+) (*Backup, error) {
+	var backup Backup
+
+	err := storage.
+		GetDb().
+		Where("database_id = ? AND status = ?",
+			databaseID, BackupStatusCompleted).
+		Order("created_at DESC").
+		First(&backup).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+
+		return nil, err
+	}
+
+	return &backup, nil
+}
+
 func (r *BackupRepository) FindLastCompletedFullWalBackupByDatabaseID(
 	databaseID uuid.UUID,
 ) (*Backup, error) {
