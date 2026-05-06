@@ -159,6 +159,9 @@ RUN groupadd -g 999 postgres || true && \
   mkdir -p /databasus-data/pgdata && \
   chown -R postgres:postgres /databasus-data/pgdata
 
+# Create non-root user for the main application process
+RUN useradd -r -s /usr/sbin/nologin -u 65532 databasus
+
 WORKDIR /app
 
 # Copy Goose from build stage
@@ -293,7 +296,12 @@ echo "Setting up data directory permissions..."
 mkdir -p /databasus-data/pgdata
 mkdir -p /databasus-data/temp
 mkdir -p /databasus-data/backups
-chown -R postgres:postgres /databasus-data
+chown databasus:databasus /databasus-data
+chown -R postgres:postgres /databasus-data/pgdata
+chown -R databasus:databasus /databasus-data/temp /databasus-data/backups
+# Upgrade path: secret.key and instance.json may be owned by root or postgres
+# from older images. Re-own them so the non-root main process can read/write.
+chown databasus:databasus /databasus-data/secret.key /databasus-data/instance.json 2>/dev/null || true
 chmod 700 /databasus-data/temp
 
 # ========= Start Valkey (internal cache) =========
@@ -442,7 +450,7 @@ if [ -n "\${DANGEROUS_VALKEY_HOST:-}" ]; then
     echo ""
 fi
 
-exec ./main
+exec gosu databasus ./main
 EOF
 
 LABEL org.opencontainers.image.source="https://github.com/databasus/databasus"

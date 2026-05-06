@@ -23,6 +23,16 @@ service:
   # Headless service for StatefulSet
   headless:
     enabled: true
+# Security context for the pod (e.g. fsGroup for volume permissions)
+# NOTE: The entrypoint runs as root to bootstrap PostgreSQL and Valkey,
+# then drops privileges to a non-root user via gosu. Do not set
+# runAsNonRoot or runAsUser here -- it will prevent the container from starting.
+podSecurityContext: {}
+
+# Security context for the databasus container
+# See podSecurityContext note above regarding root requirement.
+securityContext: {}
+
 # Resource limits and requests
 resources:
   requests:
