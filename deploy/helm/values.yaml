@@ -14,6 +14,28 @@ replicaCount: 1
 # RootCA setup, need name of secret in same namespace
 customRootCA: ""
 
+# Extra environment variables to inject into the databasus container.
+# Accepts the standard Kubernetes EnvVar shape (value or valueFrom).
+# Note: env values must be strings — use quoted "true"/"false" rather than bare
+# booleans, and pass `--set-string` on the CLI to avoid Kubernetes rejecting
+# non-string values.
+extraEnv: []
+# - name: IS_DISABLE_ANONYMOUS_TELEMETRY
+#   value: "true"
+# - name: SOME_TOKEN
+#   valueFrom:
+#     secretKeyRef:
+#       name: databasus-extras
+#       key: token
+
+# Extra envFrom sources mounted into the databasus container.
+# Accepts the standard Kubernetes EnvFromSource shape.
+extraEnvFrom: []
+# - secretRef:
+#     name: databasus-extras
+# - configMapRef:
+#     name: databasus-extras-cm
+
 # Service configuration
 service:
   type: ClusterIP

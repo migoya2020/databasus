@@ -56,6 +56,47 @@ customRootCA: my-root-ca
 
 The certificate will be mounted to `/etc/ssl/certs/custom-root-ca.crt` and the `SSL_CERT_FILE` environment variable will be set automatically.
 
+### Extra Environment Variables
+
+| Parameter       | Description                                                                       | Default Value |
+| --------------- | --------------------------------------------------------------------------------- | ------------- |
+| `extraEnv`      | Extra env vars on the container; standard Kubernetes EnvVar shape.                | `[]`          |
+| `extraEnvFrom`  | Extra envFrom sources; standard Kubernetes EnvFromSource (secretRef/configMapRef).| `[]`          |
+
+Use `extraEnv` for arbitrary container env injection — for example, disabling anonymous telemetry in air-gapped or compliance-restricted clusters:
+
+```yaml
+extraEnv:
+  - name: IS_DISABLE_ANONYMOUS_TELEMETRY
+    value: "true"
+```
+
+Or pull a secret value into the container:
+
+```yaml
+extraEnv:
+  - name: SOME_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: databasus-extras
+        key: token
+```
+
+Use `extraEnvFrom` to mount entire Secrets/ConfigMaps as env (handy with External Secrets Operator or the secrets-store-csi-driver):
+
+```yaml
+extraEnvFrom:
+  - secretRef:
+      name: databasus-extras
+  - configMapRef:
+      name: databasus-extras-cm
+```
+
+Notes:
+
+- Env values must be strings. Use quoted `"true"` / `"false"` rather than bare booleans, and pass `--set-string` on the CLI (e.g. `--set-string 'extraEnv[0].value=true'`) to avoid Kubernetes rejecting non-string values.
+- `extraEnv` is appended after `SSL_CERT_FILE` (when `customRootCA` is set), so an entry with the same name will override `SSL_CERT_FILE`. Avoid duplicate `name` entries unless that override is intentional.
+
 ### Service
 
 | Parameter                  | Description             | Default Value |

@@ -51,10 +51,19 @@ spec:
           securityContext:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- if .Values.customRootCA }}
+          {{- if or .Values.customRootCA .Values.extraEnv }}
           env:
+            {{- if .Values.customRootCA }}
             - name: SSL_CERT_FILE
               value: /etc/ssl/certs/custom-root-ca.crt
+            {{- end }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- end }}
+          {{- with .Values.extraEnvFrom }}
+          envFrom:
+            {{- toYaml . | nindent 12 }}
           {{- end }}
           ports:
             - name: http
