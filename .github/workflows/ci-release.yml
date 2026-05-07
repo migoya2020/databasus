@@ -279,11 +279,11 @@ jobs:
 
       - name: Wait for containers to be ready
         run: |
-          # Wait for main dev database
-          timeout 60 bash -c 'until docker exec backend-db pg_isready -h localhost -p 5437 -U postgres; do sleep 2; done'
+          # Wait for main dev database (postgres listens on 5432 inside the container)
+          timeout 60 bash -c 'until docker exec backend-db pg_isready -U postgres; do sleep 2; done'
 
-          # Wait for test database
-          timeout 60 bash -c 'until docker exec backend-db-test pg_isready -h localhost -p 5438 -U postgres; do sleep 2; done'
+          # Wait for test database (postgres listens on 5432 inside the container)
+          timeout 60 bash -c 'until docker exec backend-db-test pg_isready -U postgres; do sleep 2; done'
 
           # Wait for Valkey (cache)
           echo "Waiting for Valkey..."
@@ -297,12 +297,16 @@ jobs:
           timeout 60 bash -c 'until nc -z 172.17.0.1 5003; do sleep 2; done'
           timeout 60 bash -c 'until nc -z 172.17.0.1 5004; do sleep 2; done'
           timeout 60 bash -c 'until nc -z 172.17.0.1 5005; do sleep 2; done'
+          timeout 60 bash -c 'until nc -z 172.17.0.1 5006; do sleep 2; done'
 
           # Wait for MinIO
           timeout 60 bash -c 'until nc -z 172.17.0.1 9000; do sleep 2; done'
 
           # Wait for Azurite
           timeout 60 bash -c 'until nc -z 172.17.0.1 10000; do sleep 2; done'
+
+          # Wait for NAS (Samba)
+          timeout 60 bash -c 'until nc -z 172.17.0.1 7006; do sleep 2; done'
 
           # Wait for FTP
           timeout 60 bash -c 'until nc -z 172.17.0.1 7007; do sleep 2; done'
