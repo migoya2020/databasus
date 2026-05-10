@@ -124,7 +124,8 @@ RUN set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends \
       wget ca-certificates gnupg lsb-release sudo gosu curl unzip xz-utils \
-      libncurses5 libncurses6 rclone; \
+      libncurses5 libncurses6 rclone \
+      libmariadb3; \
     wget -qO- https://www.postgresql.org/media/keys/ACCC4CF8.asc | apt-key add -; \
     echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
       > /etc/apt/sources.list.d/pgdg.list; \
